@@ -28,38 +28,37 @@
 
 1. Клонируйте репозиторий:
 
-```bash
+```
 git clone https://github.com/zsfreee/Annonimizer.git
 cd anonymizer
 ```
 
 2. Создайте виртуальное окружение и установите зависимости:
 
-```bash
-# Создание виртуального окружения
+```
 python -m venv venv
+```
 
 # Активация виртуального окружения
 # На Windows:
+```
 venv\Scripts\activate
+```
 # На macOS/Linux:
-# source venv/bin/activate
+```
+source venv/bin/activate
 ```
 # Установка необходимых пакетов
 Не забываем обновить pip
 ```
 python.exe -m pip install --upgrade pip
 ```
+```
 pip install -r requirements.txt
 ```
-
 ## Использование
-
-### Графический интерфейс
-
 Для запуска программы с графическим интерфейсом:
-
-```bash
+```
 python main.py
 ```
 
