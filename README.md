@@ -44,8 +44,12 @@ python -m venv venv
 venv\Scripts\activate
 # На macOS/Linux:
 # source venv/bin/activate
-
+```
 # Установка необходимых пакетов
+Не забываем обновить pip
+```
+python.exe -m pip install --upgrade pip
+```
 pip install -r requirements.txt
 ```
 
