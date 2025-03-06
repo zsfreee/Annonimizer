@@ -1,0 +1,23 @@
+# Виртуальное окружение
+venv/
+env/
+ENV/
+
+# Кеш Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Директория моделей
+models/
+
+# Файлы IDE/редакторов
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Временные и тестовые файлы
+*.csv
+*.log
+*.tmp
