@@ -29,7 +29,7 @@
 1. Клонируйте репозиторий:
 
 ```bash
-git clone (https://github.com/zsfreee/Annonimizer.git)
+git clone https://github.com/zsfreee/Annonimizer.git
 cd anonymizer
 ```
 
