@@ -23,22 +23,51 @@ class AnonymizerThread(QThread):
     progress_signal = pyqtSignal(int)
     result_signal = pyqtSignal(str)
     
-    def __init__(self, anonymizer, input_file, output_file, text_column):
+    def __init__(self, anonymizer, input_file, output_file, text_column, output_simple_file=None):
         super().__init__()
         self.anonymizer = anonymizer
         self.input_file = input_file
         self.output_file = output_file
         self.text_column = text_column
+        self.output_simple_file = output_simple_file
         
     def run(self):
         """Запуск анонимизации в отдельном потоке"""
         try:
+            # Основной файл с полными данными
             result = self.anonymizer.process_csv(
                 self.input_file, 
                 self.output_file, 
                 self.text_column,
                 callback=self.progress_signal.emit
             )
+            
+            # Если указан файл для упрощенного вывода, создаем его
+            if self.output_simple_file:
+                try:
+                    # Загружаем обработанный CSV файл
+                    df = pd.read_csv(self.output_file, encoding='utf-8', quotechar='"')
+                    
+                    # Определяем колонку с идентификатором файла/записи
+                    id_column = None
+                    for candidate in ['ID', 'Файл', 'File', 'id', 'file', 'filename', 'Имя файла']:
+                        if candidate in df.columns:
+                            id_column = candidate
+                            break
+                    
+                    # Если не нашли подходящую колонку, используем первую
+                    if id_column is None:
+                        id_column = df.columns[0]
+                    
+                    # Создаем новый датафрейм только с ID и анонимизацией
+                    simple_df = df[[id_column, 'Анонимизация']]
+                    
+                    # Сохраняем результат
+                    simple_df.to_csv(self.output_simple_file, index=False, encoding='utf-8', quotechar='"')
+                    result += f"\nСоздан упрощенный файл: {self.output_simple_file}"
+                except Exception as e:
+                    result += f"\nОшибка при создании упрощенного файла: {e}"
+            
             self.result_signal.emit(result)
         except Exception as e:
             error_message = f"Ошибка при обработке файла: {e}\n{traceback.format_exc()}"
@@ -52,6 +81,7 @@ class AnonymizerApp(QMainWindow):
         self.anonymizer = TextAnonymizer()
         self.input_file = ""
         self.output_file = ""
+        self.output_simple_file = ""
         self.initUI()
         
     def initUI(self):
@@ -104,20 +134,38 @@ class AnonymizerApp(QMainWindow):
         input_layout.addWidget(self.input_path)
         input_layout.addWidget(self.input_btn)
         
-        # Выбор выходного файла
+        # Выбор выходных файлов
         output_layout = QHBoxLayout()
-        self.output_label = QLabel("Выходной CSV:")
+        self.output_label = QLabel("Выходные файлы:")
+        file_layout.addLayout(input_layout)
+        file_layout.addWidget(self.output_label)
+        
+        # Полный выходной файл
+        full_output_layout = QHBoxLayout()
+        self.full_output_label = QLabel("Полные данные:")
         self.output_path = QLineEdit()
         self.output_path.setReadOnly(True)
         self.output_btn = QPushButton("Выбрать...")
         self.output_btn.clicked.connect(self.select_output_file)
         
-        output_layout.addWidget(self.output_label)
-        output_layout.addWidget(self.output_path)
-        output_layout.addWidget(self.output_btn)
+        full_output_layout.addWidget(self.full_output_label)
+        full_output_layout.addWidget(self.output_path)
+        full_output_layout.addWidget(self.output_btn)
         
-        file_layout.addLayout(input_layout)
-        file_layout.addLayout(output_layout)
+        # Упрощенный выходной файл
+        simple_output_layout = QHBoxLayout()
+        self.simple_output_label = QLabel("Только анонимизация:")
+        self.simple_output_path = QLineEdit()
+        self.simple_output_path.setReadOnly(True)
+        self.simple_output_btn = QPushButton("Выбрать...")
+        self.simple_output_btn.clicked.connect(self.select_simple_output_file)
+        
+        simple_output_layout.addWidget(self.simple_output_label)
+        simple_output_layout.addWidget(self.simple_output_path)
+        simple_output_layout.addWidget(self.simple_output_btn)
+        
+        file_layout.addLayout(full_output_layout)
+        file_layout.addLayout(simple_output_layout)
         file_group.setLayout(file_layout)
         
         self.main_layout.addWidget(file_group)
@@ -245,28 +293,47 @@ class AnonymizerApp(QMainWindow):
             self.input_path.setText(file_path)
             self.log_message(f"Выбран входной файл: {file_path}")
             
-            # Автоматически устанавливаем выходной файл в той же папке
+            # Автоматически устанавливаем пути выходных файлов в той же папке
             dir_path = os.path.dirname(file_path)
             base_name = os.path.basename(file_path)
             name, ext = os.path.splitext(base_name)
+            
+            # Полный файл вывода
             default_output = os.path.join(dir_path, f"{name}_anon{ext}")
             self.output_file = default_output
             self.output_path.setText(default_output)
+            
+            # Упрощенный файл вывода
+            simple_output = os.path.join(dir_path, f"{name}_simple{ext}")
+            self.output_simple_file = simple_output
+            self.simple_output_path.setText(simple_output)
             
             # Обновляем предпросмотр и список колонок
             self.update_preview()
             self.update_ui_state()
     
     def select_output_file(self):
-        """Выбор выходного CSV файла"""
+        """Выбор полного выходного CSV файла"""
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "Выбор выходного CSV файла", "", "CSV Files (*.csv)"
+            self, "Выбор полного выходного CSV файла", self.output_file, "CSV Files (*.csv)"
         )
         
         if file_path:
             self.output_file = file_path
             self.output_path.setText(file_path)
-            self.log_message(f"Выбран выходной файл: {file_path}")
+            self.log_message(f"Выбран полный выходной файл: {file_path}")
+            self.update_ui_state()
+    
+    def select_simple_output_file(self):
+        """Выбор упрощенного выходного CSV файла"""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Выбор упрощенного выходного CSV файла", self.output_simple_file, "CSV Files (*.csv)"
+        )
+        
+        if file_path:
+            self.output_simple_file = file_path
+            self.simple_output_path.setText(file_path)
+            self.log_message(f"Выбран упрощенный выходной файл: {file_path}")
             self.update_ui_state()
     
     def update_preview(self):
@@ -303,7 +370,7 @@ class AnonymizerApp(QMainWindow):
         has_input = bool(self.input_file)
         has_output = bool(self.output_file)
         
-        # Включаем кнопку запуска только если выбраны оба файла
+        # Включаем кнопку запуска только если выбраны входной и хотя бы один выходной файл
         self.start_btn.setEnabled(has_input and has_output)
     
     def test_anonymization(self):
@@ -365,6 +432,7 @@ class AnonymizerApp(QMainWindow):
         # Отключаем кнопки на время выполнения
         self.input_btn.setEnabled(False)
         self.output_btn.setEnabled(False)
+        self.simple_output_btn.setEnabled(False)
         self.start_btn.setEnabled(False)
         self.column_combo.setEnabled(False)
         self.test_btn.setEnabled(False)
@@ -388,13 +456,26 @@ class AnonymizerApp(QMainWindow):
             
         self.anonymizer.entity_types = selected_entity_types
         
+        # Определяем, нужно ли создавать упрощенный файл
+        use_simple_file = bool(self.output_simple_file)
+        
         # Создаем и запускаем поток
         self.log_message(f"Начало анонимизации. Колонка: {selected_column}, типы сущностей: {', '.join(selected_entity_types)}")
+        
+        # Включаем информацию о создании файлов в лог
+        if use_simple_file:
+            self.log_message(f"Будут созданы два файла: полный ({self.output_file}) и упрощенный ({self.output_simple_file})")
+        else:
+            self.log_message(f"Будет создан только полный файл: {self.output_file}")
+        
+        # Создаем и запускаем поток анонимизации
+        simple_file = self.output_simple_file if use_simple_file else None
         self.thread = AnonymizerThread(
             self.anonymizer, 
             self.input_file, 
             self.output_file, 
-            selected_column
+            selected_column,
+            simple_file
         )
         self.thread.progress_signal.connect(self.update_progress)
         self.thread.result_signal.connect(self.process_completed)
@@ -412,37 +493,18 @@ class AnonymizerApp(QMainWindow):
         # Повторно включаем кнопки
         self.input_btn.setEnabled(True)
         self.output_btn.setEnabled(True)
+        self.simple_output_btn.setEnabled(True)
         self.start_btn.setEnabled(True)
         self.column_combo.setEnabled(True)
         self.test_btn.setEnabled(True)
-        
-        # Предлагаем открыть файл
-        self.log_message(f"Результат сохранен в файл: {self.output_file}")
         
         # Если в результате есть "Ошибка", показываем сообщение об ошибке
         if "Ошибка" in result:
             QMessageBox.critical(self, "Ошибка", result)
         else:
-            # Предлагаем открыть файл
-            reply = QMessageBox.question(
-                self, 
-                "Обработка завершена", 
-                f"Анонимизация завершена. Открыть результат в блокноте?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
-            )
-            
-            if reply == QMessageBox.Yes:
-                # Открытие файла в блокноте или другом текстовом редакторе
-                try:
-                    if sys.platform.startswith('win'):
-                        os.startfile(self.output_file)
-                    elif sys.platform.startswith('darwin'):  # macOS
-                        os.system(f'open "{self.output_file}"')
-                    else:  # Linux и другие Unix
-                        os.system(f'xdg-open "{self.output_file}"')
-                except Exception as e:
-                    self.log_message(f"Ошибка при открытии файла: {e}")
+            # Показываем сообщение о завершении без предложения открыть файл
+            QMessageBox.information(self, "Обработка завершена", 
+                                  "Анонимизация успешно завершена.")
     
     def log_message(self, message):
         """Добавление сообщения в журнал"""
